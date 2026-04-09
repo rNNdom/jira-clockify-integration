@@ -1,0 +1,13 @@
+{
+  "name": "workstart",
+  "version": "0.1.0",
+  "description": "Start working on a Jira task with Clockify time tracking and VS Code",
+  "type": "module",
+  "bin": {
+    "workstart": "./src/cli.js"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0"
+  }
+}
