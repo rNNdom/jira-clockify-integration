@@ -10,11 +10,31 @@ export async function getUserInfo() {
   return res.json();
 }
 
-export async function startTimer(description, workspaceId) {
+export async function getProjects(workspaceId) {
+  const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/projects?archived=false`, {
+    headers: headers(),
+  });
+  if (!res.ok) throw new Error(`Clockify ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function getTasks(workspaceId, projectId) {
+  const res = await fetch(
+    `${BASE_URL}/workspaces/${workspaceId}/projects/${projectId}/tasks?is-active=true`,
+    { headers: headers() }
+  );
+  if (!res.ok) throw new Error(`Clockify ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function startTimer(description, workspaceId, projectId, taskId) {
+  const body = { start: new Date().toISOString(), description };
+  if (projectId) body.projectId = projectId;
+  if (taskId) body.taskId = taskId;
   const res = await fetch(`${BASE_URL}/workspaces/${workspaceId}/time-entries`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ start: new Date().toISOString(), description }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Clockify ${res.status}: ${await res.text()}`);
   return res.json();

@@ -11,8 +11,26 @@ config({ path: resolve(homedir(), ".workstartrc") });
 config();
 
 import { getJiraIssue, addWorklog } from "./jira.js";
-import { getUserInfo, startTimer, stopTimer } from "./clockify.js";
+import { getUserInfo, getProjects, getTasks, startTimer, stopTimer } from "./clockify.js";
 import { openVSCode, setupNewFeatureBranch } from "./vscode.js";
+
+function prefixMatch(items, input, label) {
+  const lower = input.toLowerCase();
+  const exact = items.filter((i) => i.name.toLowerCase() === lower);
+  if (exact.length === 1) return exact[0];
+
+  const matches = items.filter((i) => i.name.toLowerCase().startsWith(lower));
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    const names = items.map((i) => i.name).join(", ");
+    console.error(`  ${label} "${input}" not found. Available: ${names}`);
+    process.exit(1);
+  }
+  // Ambiguous — show conflicting matches so the user can narrow down
+  const names = matches.map((i) => i.name).join(", ");
+  console.error(`  ${label} "${input}" is ambiguous. Matches: ${names}`);
+  process.exit(1);
+}
 
 function formatDuration(ms) {
   const totalSec = Math.floor(ms / 1000);
@@ -30,13 +48,15 @@ program
   .name("workstart")
   .description("Start working on a Jira task with Clockify time tracking.")
   .argument("<issue-key>", "Jira issue key (e.g. AURORE-123)")
-  .argument("[project-path]", "Path to the project directory")
+  .option("--path <dir>", "Path to the project directory")
   .option("--new-feature", "Checkout develop, pull, and create feature/<issue-key> branch")
-  .action(async (issueKey, projectPath, opts) => {
+  .option("--project <name>", "Clockify project name to associate with the time entry")
+  .option("--task <name>", "Clockify task name within the project (requires --project)")
+  .action(async (issueKey, opts) => {
     issueKey = issueKey.toUpperCase();
-    if (projectPath) {
-      projectPath = resolve(projectPath.replace(/^~/, homedir()));
-    }
+    let projectPath = opts.path
+      ? resolve(opts.path.replace(/^~/, homedir()))
+      : undefined;
 
     // --- Jira --------------------------------------------------------
     console.log(`  Fetching ${issueKey} from Jira...`);
@@ -76,7 +96,26 @@ program
       const user = await getUserInfo();
       workspaceId = user.activeWorkspace;
       userId = user.id;
-      await startTimer(entryName, workspaceId);
+
+      let projectId, taskId;
+      if (opts.project) {
+        const projects = await getProjects(workspaceId);
+        const project = prefixMatch(projects, opts.project, "Project");
+        projectId = project.id;
+        console.log(`  Project: ${project.name}`);
+
+        if (opts.task) {
+          const tasks = await getTasks(workspaceId, projectId);
+          const task = prefixMatch(tasks, opts.task, "Task");
+          taskId = task.id;
+          console.log(`  Task: ${task.name}`);
+        }
+      } else if (opts.task) {
+        console.error("  --task requires --project to be set");
+        process.exit(1);
+      }
+
+      await startTimer(entryName, workspaceId, projectId, taskId);
     } catch (err) {
       console.error(`  Failed to start timer: ${err.message}`);
       process.exit(1);
